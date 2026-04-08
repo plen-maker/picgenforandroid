@@ -18,7 +18,7 @@ if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
-    st.title("🔐 Belepes")
+    st.title(" Belepes")
     pwd_input = st.text_input("Jelszo", type="password")
     if st.button("OK"):
         if pwd_input == APP_PASSWORD:
@@ -28,7 +28,7 @@ if not st.session_state['logged_in']:
             st.error("Hibas jelszo!")
     st.stop()
 
-# --- FORDITO FUNKCIO (Kozvetlen API hivas, nincs 404) ---
+# --- FORDITO FUNKCIO 
 def translate_with_gemini(text):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
     payload = {
@@ -48,7 +48,7 @@ def translate_with_gemini(text):
 st.title("🎨 Profi Magyar AI Kepalkoto")
 st.write("Irj magyarul, az AI automatikusan fordit es rajzol!")
 
-chat_input = st.chat_input("Pl.: Egy modern török rendőr Isztambulban...")
+chat_input = st.chat_input("Ha magyarul irsz bele akkor legyenek ekezetek vagy maskep nem mukodik")
 
 if chat_input:
     with st.chat_message("user"):
