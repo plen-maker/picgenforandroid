@@ -2,26 +2,20 @@ import streamlit as st
 import requests
 from io import BytesIO
 from PIL import Image
-import google.generativeai as genai
+import urllib.parse
 
-# KULCSOK BETÖLTÉSE
 try:
     HF_TOKEN = st.secrets["HF_TOKEN"]
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except Exception:
-    st.error("Hiba: Hianyoznak a kulcsok a Secrets-bol!")
+    st.error("Hiba: HF_TOKEN hianyzik!")
     st.stop()
 
-# Gemini konfigurálása (INGYENES VERZIÓ)
-genai.configure(api_key=GOOGLE_API_KEY)
+st.set_page_config(page_title="AI Kep Studio", page_icon="🎨")
 
-st.set_page_config(page_title="AI Multi App", page_icon="🤖")
-
-# LOGIN
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
+
 if not st.session_state['logged_in']:
-    st.title("Belepes")
     pwd = st.text_input("Jelszo", type="password")
     if st.button("OK"):
         if pwd == "admin":
@@ -29,52 +23,51 @@ if not st.session_state['logged_in']:
             st.rerun()
     st.stop()
 
-# MENÜ
-tab1, tab2 = st.tabs(["💬 Beszelgetes", "🎨 Kepkeszites"])
+st.title("AI Kep Studio (HF + Pollinations)")
 
-# --- CHAT ABLAK ---
-with tab1:
-    st.header("AI Chatbot")
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# --- 1. LEPES: ALAP KEP GENERALASA (Hugging Face) ---
+st.subheader("1. Generalj egy alap kepet")
+base_prompt = st.text_input("Mit rajzoljak eloszor? (angolul)", "A portrait of a man")
 
-    # Korábbi üzenetek megjelenítése
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+if st.button("Alap kep keszitese"):
+    with st.spinner("HF dolgozik..."):
+        API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+        headers = {"Authorization": "Bearer " + HF_TOKEN}
+        res = requests.post(API_URL, headers=headers, json={"inputs": base_prompt})
+        
+        if res.status_code == 200:
+            st.session_state['base_img'] = res.content
+            st.session_state['current_img'] = res.content
+        else:
+            st.error("HF hiba!")
 
-    if prompt := st.chat_input("Irj valamit..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+# Ha mar van kepunk, megjelenitjuk
+if 'current_img' in st.session_state:
+    st.image(st.session_state['current_img'], use_container_width=True)
 
-        with st.chat_message("assistant"):
-            try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                response = model.generate_content(prompt)
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-            except Exception as e:
-                st.error("Hiba a chatekben. Ellenorizd az ingyenes API kulcsot!")
-
-# --- KÉPGENERÁTOR ---
-with tab2:
-    st.header("Kepalkoto")
-    st.write("Tipp: Ha nem ismer fel egy nevet, ird le az illetot (pl. haj, szemüveg, ruha).")
-    img_prompt = st.text_area("Mit rajzoljak? (Angolul)", placeholder="A futuristic city with flying cars")
+    # --- 2. LEPES: MODOSITAS CHAT BOX-SZAL (Pollinations) ---
+    st.subheader("2. Modositas a chat ablakban")
+    st.write("Ird ide, mit valtoztassak a fenti kepen!")
     
-    if st.button("RAJZOLAS"):
-        if img_prompt:
-            with st.spinner("Alkotas..."):
-                # UJ ROUTER URL
-                API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
-                headers = {"Authorization": "Bearer " + HF_TOKEN}
-                
-                res = requests.post(API_URL, headers=headers, json={"inputs": img_prompt})
-                
-                if res.status_code == 200:
-                    img = Image.open(BytesIO(res.content))
-                    st.image(img, use_container_width=True)
+    # Ez a chat beviteli mezo az oldal aljan
+    chat_mod = st.chat_input("Pl.: 'make him smile', 'add a sun hat', 'neon lights'")
+
+    if chat_mod:
+        with st.spinner("Pollinations modositas..."):
+            # Pollinations.ai kepmodosito link osszerakasa
+            # A Pollinations kep-alapu modositasa a promptba agyazott parameterekkel mukodik a legstabilabban
+            encoded_prompt = urllib.parse.quote(chat_mod)
+            poll_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true"
+            
+            try:
+                poll_res = requests.get(poll_url)
+                if poll_res.status_code == 200:
+                    st.session_state['current_img'] = poll_res.content
+                    st.rerun() # Frissitjuk az oldalt az uj keppel
                 else:
-                    st.error("Hiba: " + str(res.status_code))
-                    st.write("Lehet, hogy a Fine-grained tokenen nincs bepipalva az Inference Provider?")
+                    st.error("Pollinations hiba!")
+            except Exception as e:
+                st.error("Hiba: " + str(e))
+
+    if st.button("Kep mentese"):
+        st.download_button("Letoltes", st.session_state['current_img'], "ai_kep.png", "image/png")
