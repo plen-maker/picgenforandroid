@@ -6,7 +6,7 @@ import time
 
 # --- KONFIGURÁCIÓ ---
 # IDE MÁSOLD A HUGGING FACE TOKENEDET!
-HF_TOKEN = "IDE_A_TE_TOKENED"
+HF_TOKEN = "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"
 API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
