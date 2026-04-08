@@ -1,74 +1,68 @@
 import streamlit as st
 import requests
-from io import BytesIO
-from PIL import Image
 import urllib.parse
 
 # Alapbeallitasok
 APP_PASSWORD = "admin"
-st.set_page_config(page_title="AI Kep Studio", page_icon="🎨")
+st.set_page_config(page_title="AI Kep Chat", page_icon="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRntRZVOrqGu_lXojFBN--lmsNttJ2TuxQ4Xg&s")
 
 # --- LOGIN ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
-    st.title("🔐 Belepes")
+    st.title(" Belepes")
     pwd_input = st.text_input("Jelszo", type="password")
     if st.button("OK"):
         if pwd_input == APP_PASSWORD:
             st.session_state['logged_in'] = True
             st.rerun()
+        else:
+            st.error("Hibas jelszo!")
     st.stop()
 
-st.title("🎨 AI Kep Studio (Stabil)")
+# --- APP FELULET ---
+st.title(" AI Kepalkoto Chat")
+st.write("Ird le angolul a chatbe, mit rajzoljak neked!")
 
-# 1. OPCIONALIS KEP FELTOLTES
-st.markdown("### 1. Tolts fel egy kepet alapnak")
-uploaded_file = st.file_uploader("Valassz egy kepet a modositashoz:", type=['png', 'jpg', 'jpeg'])
-
-if uploaded_file:
-    st.image(uploaded_file, caption="Eredeti kep betoltve", use_container_width=True)
-
-st.divider()
-
-# 2. CHAT INPUT
-chat_input = st.chat_input("Ird ide a parancsot angolul...")
+# --- CHAT INPUT ---
+# Ez a mezo mindig az oldal aljan marad
+chat_input = st.chat_input("Pl.: 'A cyberpunk city', 'A cute cat with glasses'...")
 
 if chat_input:
-    with st.spinner("AI dolgozik..."):
-        try:
-            encoded_prompt = urllib.parse.quote(chat_input)
-            
-            if uploaded_file:
-                # --- MODOSITAS (Image-to-Image) ---
-                # A kepet Base64 helyett feltoltjuk egy ideiglenes tarhelyre
-                files = {'file': uploaded_file.getvalue()}
-                upload_res = requests.post('https://temp.sh/upload', files=files)
-                
-                if upload_res.status_code == 200:
-                    temp_url = upload_res.text.strip()
-                    encoded_url = urllib.parse.quote(temp_url)
-                    # Pollinations stabil Image-to-Image URL
-                    final_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&image-url={encoded_url}"
-                else:
-                    st.error("Kepfeltoltesi hiba.")
-                    st.stop()
-            else:
-                # --- UJ KEP (Text-to-Image) ---
-                final_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+    # Megjelenitjük a felhasznalo kereset
+    with st.chat_message("user"):
+        st.markdown(chat_input)
 
-            # Kep lekerese a Pollinations-tol (nem dob 404-et)
-            res = requests.get(final_url)
-            
-            if res.status_code == 200:
-                st.image(res.content, caption="AI eredmeny", use_container_width=True)
-                st.download_button("📥 Mentes", res.content, "ai_kep.png", "image/png")
-            else:
-                st.error(f"AI hiba: {res.status_code}")
+    # Generalas folyamata
+    with st.chat_message("assistant"):
+        with st.spinner("Rajzolas folyamatban..."):
+            try:
+                # Szoveg kodolasa az URL-hez
+                encoded_prompt = urllib.parse.quote(chat_input)
                 
-        except Exception as e:
-            st.error(f"Hiba tortent: {e}")
+                # Pollinations API link (gyors es ingyenes)
+                final_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true"
+                
+                # Kep lekerese
+                res = requests.get(final_url)
+                
+                if res.status_code == 200:
+                    # Megjelenitjuk a kepet a chaten belul
+                    st.image(res.content, use_container_width=True)
+                    
+                    # Mentes gomb a kep alatt
+                    st.download_button(
+                        label=" Kep mentese",
+                        data=res.content,
+                        file_name="ai_generalt_kep.png",
+                        mime="image/png"
+                    )
+                else:
+                    st.error("Sajnos a kepalkoto szerver most nem valaszol.")
+            
+            except Exception as e:
+                st.error(f"Hiba tortent: {e}")
 
 st.divider()
-st.caption("Ez a verzio a Pollinations API-t hasznalja, ami ingyenes es stabil.")
+st.caption("Tipp: Minel reszletesebben irod le (angolul), annal szebb lesz a kep! MIvel a Magyar egy szar nyelv! ")
