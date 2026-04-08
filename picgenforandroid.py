@@ -27,8 +27,7 @@ if not st.session_state['logged_in']:
 
 st.title("AI Kepgenerator")
 
-# AZ UJ ROUTER CIM
-API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
+API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
 headers = {"Authorization": "Bearer " + HF_TOKEN}
 
 uploaded_file = st.file_uploader("Kep alapnak", type=['png', 'jpg', 'jpeg'])
