@@ -1,100 +1,131 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import requests
-import google.generativeai as genai
-from io import BytesIO
+import replicate
 from PIL import Image
+import requests
+from io import BytesIO
+import time
 
-# --- BIZTONSÁGI BEÁLLÍTÁSOK ---
+# --- BIZTONSÁGI BEÁLLÍTÁSOK (Secrets-ből) ---
 try:
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    # Kell egy Replicate API token (Settings -> API Tokens)
+    REPLICATE_API_TOKEN = st.secrets["REPLICATE_API_TOKEN"]
+    # A te Hugging Face kulcsod (hátha kell tartaléknak)
     HF_TOKEN = st.secrets["HF_TOKEN"]
     APP_PASSWORD = st.secrets["APP_PASSWORD"]
-except Exception:
-    st.error("Hiba: Hianyoznak a kulcsok a Streamlit Secrets-bol!")
+except KeyError:
+    st.error("HIBA: Hianyoznak az API kulcsok a Streamlit Secrets-bol! (REPLICATE_API_TOKEN, HF_TOKEN, APP_PASSWORD)")
     st.stop()
 
-genai.configure(api_key=GOOGLE_API_KEY)
+# Replicate token konfigurálása
+import os
+os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
 
-# Modell eleresi utak
-MODEL_FLUX = "black-forest-labs/FLUX.1-schnell"
-MODEL_SDXL = "stabilityai/stable-diffusion-xl-base-1.0"
+# Oldal konfiguráció (telefon-barát)
+st.set_page_config(page_title="Profi Képalkotó", page_icon="🎨", layout="centered")
 
-st.set_page_config(page_title="AI Mobil Asszisztens", page_icon="🤖")
-
-# --- LOGIN ---
+# --- 1. LOGIN RENDSZER ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
-    st.title("🔐 Bejelentkezes")
-    pwd = st.text_input("Jelszo", type="password")
-    if st.button("Belepes"):
-        if pwd == APP_PASSWORD:
+    st.title("🔐 Bejelentkezés")
+    st.write("A barátod appja. Kérlek, add meg a jelszót!")
+    pwd_input = st.text_input("Jelszó", type="password")
+    
+    if st.button("BELÉPÉS 🚀", type="primary"):
+        if pwd_input == APP_PASSWORD:
             st.session_state['logged_in'] = True
             st.rerun()
         else:
-            st.error("Hibas jelszo!")
+            st.error("Hibás jelszó! Próbáld újra.")
     st.stop()
 
-# --- APP TARTALOM ---
-st.title("🤖 AI Pro Mobil")
+# --- 2. AZ APP FŐ TARTALMA (Ha be van jelentkezve) ---
+st.title("🎨 Profi Képalkotó Központ")
 
-# Csak ketto ful maradt
-tab1, tab2 = st.tabs(["💬 Chat & Latas", "🎨 Kepgenerator"])
+# Kijelentkezés gomb az oldalsávban
+st.sidebar.title("Menü")
+if st.sidebar.button("Kijelentkezés 🚪"):
+    st.session_state['logged_in'] = False
+    st.rerun()
 
-# --- TAB 1: GEMINI (Okos Chat és Képfelismerés) ---
+# --- FÜLEK (Tabs) a telefon-barát navigációhoz ---
+tab1, tab2 = st.tabs(["🆕 Új Kép Létrehozása", "✏️ Kép Módosítása (Inpainting)"])
+
+# --- TAB 1: ÚJ KÉP LÉTREHOZÁSA (PROFI MODELLEKKEL) ---
 with tab1:
-    st.header("Gemini 1.5 Flash")
-    st.write("Tolts fel kepet a konyvrol, vagy csak kerdezz!")
+    st.header("Új Kép Generálása")
+    st.write("Írd le angolul, mit szeretnél látni!")
+
+    draw_prompt = st.text_area("Mit rajzoljak?", placeholder="pl. A realistic portrait of Viktor Orban wearing a traditional Hungarian fedora, 8k, cinematic lighting")
     
-    vision_img = st.file_uploader("Kep feltoltese", type=['jpg', 'png', 'jpeg'])
-    chat_prompt = st.text_area("Kerdesed:")
+    # Modell választó
+    model_choice = st.selectbox("Válassz modellt:", ["Stable Diffusion XL (Gyors, stabil)", "FLUX.1-schnell (Élethűbb arcok, de lassabb)"])
     
-    if st.button("KULDÉS 🚀"):
-        if chat_prompt:
-            with st.spinner("Gondolkodom..."):
+    if st.button("GENERÁLÁS ✨", type="primary", key="tab1_btn"):
+        if draw_prompt:
+            with st.spinner("AI alkotás... Ez 10-30 másodpercig tarthat."):
                 try:
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    if vision_img:
-                        img = Image.open(vision_img)
-                        res = model.generate_content([chat_prompt, img])
+                    # Kérés küldése a Replicate API-nak
+                    if "Stable Diffusion XL" in model_choice:
+                        model_version = "stabilityai/sdxl:39ed46968c93390291244e497fd33360b0e5ee2460673369f0672b2dd2718121"
                     else:
-                        res = model.generate_content(chat_prompt)
-                    st.markdown(res.text)
-                except Exception as e:
-                    st.error(f"Hiba: {e}")
+                        model_version = "black-forest-labs/flux-schnell"
 
-# --- TAB 2: KEPGENERATOR (FLUX & SDXL) ---
-with tab2:
-    st.header("AI Kepalkoto")
-    prompt = st.text_input("Mit rajzoljak? (Angolul)")
-    
-    if st.button("RAJZOLAS 🎨"):
-        if prompt:
-            with st.spinner("Alkotas folyamatban..."):
-                def fetch_image(m_id):
-                    url = f"https://api-inference.huggingface.co/models/{m_id}"
-                    h = {"Authorization": f"Bearer {HF_TOKEN}"}
-                    return requests.post(url, headers=h, json={"inputs": prompt}, timeout=30)
-
-                # Elso proba: FLUX
-                res = fetch_image(MODEL_FLUX)
-                
-                # Ha 410 vagy hiba, jöhet a tartalék SDXL
-                if res.status_code in [410, 404, 500]:
-                    st.info("Tartalek modellre valtas...")
-                    res = fetch_image(MODEL_SDXL)
-
-                if res.status_code == 200:
-                    image = Image.open(BytesIO(res.content))
-                    st.image(image, use_container_width=True)
+                    output = replicate.run(model_version, input={"prompt": draw_prompt})
                     
-                    # Mentes gomb
-                    buf = BytesIO()
-                    image.save(buf, format="PNG")
-                    st.download_button("Kep mentese", buf.getvalue(), "generalt_kep.png", "image/png")
-                elif res.status_code == 503:
-                    st.warning("A szerver melegszik, varj 15 masodpercet es nyomd meg ujra!")
-                else:
-                    st.error(f"Hiba kod: {res.status_code}. Probald mas szavakkal!")
+                    # Megjelenítés
+                    st.image(output[0], caption=f"Generált kép: {draw_prompt}", use_container_width=True)
+                    
+                    # Letöltés gomb
+                    res = requests.get(output[0])
+                    st.download_button("📥 KÉP MENTÉSE", res.content, f"ai_kep_{int(time.time())}.png", "image/png")
+                
+                except Exception as e:
+                    st.error(f"Váratlan hiba: {e}")
+        else:
+            st.warning("Kérlek, írj le egy témát!")
+
+# --- TAB 2: KÉP MÓDOSÍTÁSA (INPAINTING / EDITING) ---
+with tab2:
+    st.header("Kép Módosítása")
+    st.write("Tölts fel egy képet, és az AI megváltoztatja!")
+
+    # Kép feltöltő
+    edit_img = st.file_uploader("Kép feltöltése", type=['jpg', 'jpeg', 'png'])
+    
+    if edit_img:
+        st.image(edit_img, caption="Eredeti kép", use_container_width=True)
+        
+        # Módosító szöveg
+        edit_prompt = st.text_area("Mit változtassak?", placeholder="pl. Add a stylish fedora hat to his head, keep the face the same")
+        
+        if st.button("MÓDOSÍTÁS 🔧", type="primary", key="tab2_btn"):
+            if edit_prompt:
+                with st.spinner("AI átalakítás... Ez lassabb lehet."):
+                    try:
+                        # SDXL Inpainting modell használata
+                        output = replicate.run(
+                            "stabilityai/sdxl:39ed46968c93390291244e497fd33360b0e5ee2460673369f0672b2dd2718121",
+                            input={
+                                "image": edit_img,
+                                "prompt": edit_prompt,
+                                "mask_image": None, # Automatikus maszkolás
+                                "num_outputs": 1
+                            }
+                        )
+                        
+                        # Megjelenítés
+                        st.image(output[0], caption="Módosított kép", use_container_width=True)
+                        
+                        # Letöltés gomb
+                        res = requests.get(output[0])
+                        st.download_button("📥 KÉP MENTÉSE", res.content, f"ai_edit_{int(time.time())}.png", "image/png")
+                    
+                    except Exception as e:
+                        st.error(f"Váratlan hiba: {e}")
+            else:
+                st.warning("Kérlek, írd le a módosítást!")
+    else:
+        st.info("Tölts fel egy képet a módosításhoz!")
