@@ -3,13 +3,10 @@ import requests
 from io import BytesIO
 from PIL import Image
 import urllib.parse
-import os
 
-# Jelszó a barátodnak
+# Alapbeallitasok
 APP_PASSWORD = "admin"
-
-# Oldal konfiguráció (telefon-barát)
-st.set_page_config(page_title="AI Kepmodosito Studio", page_icon="🎨")
+st.set_page_config(page_title="AI Kep Studio", page_icon="🎨")
 
 # --- LOGIN ---
 if 'logged_in' not in st.session_state:
@@ -18,7 +15,7 @@ if 'logged_in' not in st.session_state:
 if not st.session_state['logged_in']:
     st.title("🔐 Belepes")
     pwd_input = st.text_input("Jelszo", type="password")
-    if st.button("BELEPES 🚀"):
+    if st.button("OK"):
         if pwd_input == APP_PASSWORD:
             st.session_state['logged_in'] = True
             st.rerun()
@@ -26,55 +23,57 @@ if not st.session_state['logged_in']:
             st.error("Hibas jelszo!")
     st.stop()
 
-# --- APP ---
-st.title("🎨 AI Kepmodosito Kozpont")
+st.title("🎨 Univerzalis AI Kepstudio")
+
+# --- 1. OPCIONALIS KEP FELTOLTES ---
+st.markdown("### 1. Kep feltoltese (Opcionalis)")
+uploaded_file = st.file_uploader("Ha modositani akarsz egy kepet, toltsd fel ide:", type=['png', 'jpg', 'jpeg'])
+
+if uploaded_file:
+    st.image(uploaded_file, caption="Alap kep betoltve", use_container_width=True)
+    st.info("Most ird meg a chatbe lent, mit valtoztassak a kepen!")
+else:
+    st.info("Nincs kep feltoltve. Ird meg a chatbe, mit rajzoljak a semmibol!")
 
 st.divider()
 
-# 1. LEPES: KEP FELTOLTESE (ez az alap)
-st.header("1. Tolts fel egy kepet alapnak")
-uploaded_file = st.file_uploader("Valassz egy kepet...", type=['png', 'jpg', 'jpeg'])
+# --- 2. CHAT ABLAK (Ez vezerli a generast vagy a modositast) ---
+chat_input = st.chat_input("Ird ide a parancsot angolul...")
 
-if uploaded_file:
-    # Megjelenitjuk az eredeti kepet
-    st.image(uploaded_file, caption="Eredeti kep", use_container_width=True)
-    st.divider()
-
-    # 2. LEPES: CHAT ABLAK A MODOSITASHOZ (Pollinations)
-    st.header("2. Mi legyen a modositas?")
-    # Az st.chat_input az oldal aljára kerül
-    chat_mod = st.chat_input("Pl.: 'make him smile', 'add a sun hat', 'neon lights'")
-
-    if chat_mod:
-        with st.spinner("AI modositas folyamatban..."):
-            try:
-                # Trükk: A feltöltött képet feltöltjük egy ideiglenes tárhelyre (temp.sh), 
-                # hogy a Pollinations.ai el tudja érni URL-ként.
+if chat_input:
+    with st.spinner("AI munka folyamatban..."):
+        try:
+            encoded_prompt = urllib.parse.quote(chat_input)
+            
+            if uploaded_file:
+                # MODOSITAS (Image-to-Image)
+                # Feltoltjuk a kepet egy ideiglenes tarhelyre URL-ert
                 files = {'file': uploaded_file.getvalue()}
                 upload_res = requests.post('https://temp.sh/upload', files=files)
                 
                 if upload_res.status_code == 200:
-                    temp_image_url = upload_res.text.strip()
-                    
-                    # Pollinations.ai image-to-image kérés összeállítása
-                    encoded_prompt = urllib.parse.quote(chat_mod)
-                    encoded_url = urllib.parse.quote(temp_image_url)
-                    poll_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed=42&width=1024&height=1024&nologo=true&image-url={encoded_url}"
-                    
-                    poll_res = requests.get(poll_url)
-                    
-                    if poll_res.status_code == 200:
-                        # Megjelenitjük a módosított képet
-                        st.image(poll_res.content, caption="Modositott kep", use_container_width=True)
-                        
-                        # Letöltés gomb
-                        st.download_button("📥 Kép mentése", poll_res.content, "ai_modositott_kep.png", "image/png")
-                    else:
-                        st.error("Nem sikerult a modositas a Pollinations.ai-val.")
+                    temp_url = upload_res.text.strip()
+                    encoded_url = urllib.parse.quote(temp_url)
+                    # Pollinations URL kep-alapu modositassal
+                    final_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true&image-url={encoded_url}"
                 else:
-                    st.error("Hiba tortent az ideiglenes kepfeltoltesnel.")
+                    st.error("Kepfeltoltesi hiba a szerveren.")
+                    st.stop()
+            else:
+                # UJ KEP (Text-to-Image)
+                # Sima Pollinations URL
+                final_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true"
 
-            except Exception as e:
-                st.error("Hiba tortent a modositasnal: " + str(e))
-else:
-    st.info("Tölts fel egy képet az induláshoz!")
+            # Kep lekerese
+            res = requests.get(final_url)
+            if res.status_code == 200:
+                st.image(res.content, caption="Az AI eredmenye", use_container_width=True)
+                st.download_button("📥 Mentes", res.content, "ai_vegeredmeny.png", "image/png")
+            else:
+                st.error("AI hiba történt a generáláskor.")
+                
+        except Exception as e:
+            st.error(f"Hiba: {e}")
+
+st.divider()
+st.caption("Tipp: Hasznalj angol leirast a jobb eredmenyert!")
