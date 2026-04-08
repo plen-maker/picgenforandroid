@@ -66,4 +66,4 @@ if chat_input:
 
 st.divider()
 st.caption("Tipp: Minel reszletesebben irod le (angolul), annal szebb lesz a kep! MIvel a Magyar egy szar nyelv! Ha valami nem mukodik rafogom a fideszre! 
-Created by ddnemet  For support conctact me on discord: ddnemet")
+           Created by ddnemet  For support conctact me on discord: ddnemet")
