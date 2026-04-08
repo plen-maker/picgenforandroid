@@ -45,7 +45,7 @@ def translate_with_gemini(text):
         return text # Ha hiba van, az eredetit kuldi tovább
 
 # --- APP FELULET ---
-st.title("Bena kep generator https://i.redd.it/rigby-the-cat-v0-xrtpidpxlfif1.jpg?width=1179&format=pjpg&auto=webp&s=a76975fdc042035e8f0be2343a898902f2ce00ca")
+st.title("Bena kep generator icon = https://i.redd.it/rigby-the-cat-v0-xrtpidpxlfif1.jpg?width=1179&format=pjpg&auto=webp&s=a76975fdc042035e8f0be2343a898902f2ce00ca")
 st.write("Irj magyarul, az AI automatikusan fordit es rajzol!")
 
 chat_input = st.chat_input("Ha magyarul irsz bele akkor legyenek ekezetek vagy maskep nem mukodik")
