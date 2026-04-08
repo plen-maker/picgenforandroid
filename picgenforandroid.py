@@ -1,101 +1,117 @@
 import streamlit as st
 import requests
 import io
+import uuid
 import random
-import time
+from PIL import Image
+from openai import OpenAI
+from supabase import create_client, Client
 
-st.set_page_config(page_title="AI Kep Chat", layout="wide")
+# --- SUPABASE ADATOK ---
+SUPABASE_URL = "https://jsxvvtvcitgtowpzjpyh.supabase.co"
+SUPABASE_KEY = "sb_publishable_KC7QotIFwX4T8bWr4g-WWQ_mhiBxesb"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
+st.set_page_config(page_title="AI Kep Mester Pro", layout="wide")
+
+# --- ALLAPOT KEZELES ---
+if 'user' not in st.session_state:
+    st.session_state['user'] = None
 if 'chat_history' not in st.session_state:
     st.session_state['chat_history'] = []
 if 'current_image' not in st.session_state:
     st.session_state['current_image'] = None
-if 'current_prompt' not in st.session_state:
-    st.session_state['current_prompt'] = ""
-if 'current_seed' not in st.session_state:
-    st.session_state['current_seed'] = random.randint(0, 999999)
 
-def get_image_with_retry(url, retries=3):
-    for i in range(retries):
-        try:
-            res = requests.get(url, timeout=30)
-            if res.status_code == 200:
-                return res.content
-        except Exception:
-            if i < retries - 1:
-                time.sleep(2)
-                continue
-    return None
+# --- LOGIN MODUL ---
+def login_logic():
+    if not st.session_state['user']:
+        st.title("Belepes")
+        tab1, tab2 = st.tabs(["Login", "Regisztracio"])
+        
+        with tab1:
+            email = st.text_input("Email")
+            pw = st.text_input("Jelszo", type="password")
+            if st.button("Belepes"):
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": email, "password": pw})
+                    st.session_state['user'] = res.user
+                    st.rerun()
+                except:
+                    st.error("Hiba a belepesnel")
+            
+            st.divider()
+            if st.button("Google Login (Kulso)"):
+                supabase.auth.sign_in_with_oauth({"provider": "google"})
 
-if not st.session_state['logged_in']:
-    st.header("Login")
-    u = st.text_input("User")
-    p = st.text_input("Pass", type="password")
-    if st.button("OK"):
-        if u == "admin" and p == "1234":
-            st.session_state['logged_in'] = True
-            st.rerun()
-        else:
-            st.error("Rossz adatok")
-else:
-    st.title("AI Kep Chat")
+        with tab2:
+            reg_email = st.text_input("Uj Email")
+            reg_pw = st.text_input("Uj Jelszo", type="password")
+            if st.button("Regisztracio"):
+                try:
+                    supabase.auth.sign_up({"email": reg_email, "password": reg_pw})
+                    st.success("Sikeres! Igazold vissza az emailedben.")
+                except:
+                    st.error("Hiba a regisztracional")
+        return False
+    return True
 
-    if st.sidebar.button("Exit"):
-        st.session_state['logged_in'] = False
+# --- FO PROGRAM ---
+if login_logic():
+    st.sidebar.write(f"Bejelentkezve: {st.session_state['user'].email}")
+    if st.sidebar.button("Kijelentkezes"):
+        supabase.auth.sign_out()
+        st.session_state['user'] = None
         st.rerun()
 
-    c1, c2 = st.columns([1, 1])
+    st.title("AI Kep Mester Pro")
+    
+    col1, col2 = st.columns([1, 1])
 
-    with c1:
-        st.subheader("Kep")
-        p_in = st.text_input("Leiras", placeholder="pl: space cat")
+    with col1:
+        st.subheader("Kep feltoltes vagy letrehozas")
         
-        if st.button("Generalas", type="primary"):
-            if p_in:
-                with st.spinner("Dolgozom..."):
-                    st.session_state['current_seed'] = random.randint(0, 999999)
-                    st.session_state['current_prompt'] = p_in
-                    st.session_state['chat_history'] = [{"role": "user", "content": p_in}]
-                    
-                    link = f"https://image.pollinations.ai/prompt/{p_in.replace(' ', '%20')}?seed={st.session_state['current_seed']}&model=flux"
-                    data = get_image_with_retry(link)
-                    
-                    if data:
-                        st.session_state['current_image'] = data
-                        st.rerun()
-                    else:
-                        st.error("A szerver tulterhelt, probald meg ujra 5 masodperc mulva")
+        # Kep feltoltes
+        up_file = st.file_uploader("Kep feltoltese", type=["png", "jpg", "jpeg"])
+        if up_file:
+            st.session_state['current_image'] = up_file.read()
+            st.image(st.session_state['current_image'], caption="Feltoltott kep")
+
+        # API Kulcs bekero a munka elott
+        api_k = st.text_input("OpenAI API Kulcsod", type="password")
+        prompt = st.text_input("Mit csinaljon az AI?")
+
+        if st.button("MEHET", type="primary"):
+            if api_k and prompt:
+                try:
+                    client = OpenAI(api_key=api_k)
+                    with st.spinner("AI dolgozik..."):
+                        # Itt fut a DALL-E generalas
+                        res = client.images.generate(
+                            model="dall-e-3",
+                            prompt=prompt,
+                            n=1,
+                            size="1024x1024"
+                        )
+                        img_url = res.data[0].url
+                        st.session_state['current_image'] = requests.get(img_url).content
+                        st.session_state['chat_history'].append({"role": "user", "content": prompt})
+                except Exception as e:
+                    st.error(f"Hiba: {e}")
             else:
-                st.warning("Irj be valamit")
+                st.warning("Adj meg kulcsot es leirast")
 
         if st.session_state['current_image']:
             st.image(st.session_state['current_image'], use_container_width=True)
-            st.download_button("Mentes", st.session_state['current_image'], "kep.jpg", "image/jpeg")
+            st.download_button("Kep Mentese", st.session_state['current_image'], "ai_kesz.png", "image/png")
 
-    with c2:
-        st.subheader("Chat")
-        cont = st.container(height=400)
+    with col2:
+        st.subheader("Chat Szerkeszto")
         for m in st.session_state['chat_history']:
-            with cont.chat_message(m["role"]):
+            with st.chat_message(m["role"]):
                 st.write(m["content"])
-
-        if st.session_state['current_image']:
-            if edt := st.chat_input("Modositas"):
-                st.session_state['chat_history'].append({"role": "user", "content": edt})
-                with st.spinner("Modositas..."):
-                    new_p = f"{st.session_state['current_prompt']}, {edt}"
-                    link = f"https://image.pollinations.ai/prompt/{new_p.replace(' ', '%20')}?seed={st.session_state['current_seed']}&model=flux"
-                    data = get_image_with_retry(link)
-                    if data:
-                        st.session_state['current_image'] = data
-                        st.session_state['current_prompt'] = new_p
-                        st.rerun()
-        else:
-            st.info("Hozd letre az elso kepet")
-
-    if st.button("Torles"):
-        st.session_state['chat_history'] = []
-        st.session_state['current_image'] = None
-        st.rerun()
+        
+        chat_in = st.chat_input("Ird ide a modositast...")
+        if chat_in and st.session_state['current_image']:
+            # Chat alapu modositas logikaja ide jon (DALL-E edit)
+            st.session_state['chat_history'].append({"role": "user", "content": chat_in})
+            st.rerun()
