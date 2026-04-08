@@ -11,7 +11,7 @@ except Exception:
 
 APP_PASSWORD = "titkosjelszo123" # A kepeden lathato jelszo
 
-st.set_page_config(page_title="AI Kep Studio", page_icon="🎨")
+st.set_page_config(page_title="AI Kep Studio", page_icon="https://i.redd.it/rigby-the-cat-v0-xrtpidpxlfif1.jpg?width=1179&format=pjpg&auto=webp&s=a76975fdc042035e8f0be2343a898902f2ce00ca")
 
 # --- LOGIN ---
 if 'logged_in' not in st.session_state:
@@ -45,7 +45,7 @@ def translate_with_gemini(text):
         return text # Ha hiba van, az eredetit kuldi tovább
 
 # --- APP FELULET ---
-st.title("🎨 Profi Magyar AI Kepalkoto")
+st.title("Bena kep generator https://i.redd.it/rigby-the-cat-v0-xrtpidpxlfif1.jpg?width=1179&format=pjpg&auto=webp&s=a76975fdc042035e8f0be2343a898902f2ce00ca")
 st.write("Irj magyarul, az AI automatikusan fordit es rajzol!")
 
 chat_input = st.chat_input("Ha magyarul irsz bele akkor legyenek ekezetek vagy maskep nem mukodik")
