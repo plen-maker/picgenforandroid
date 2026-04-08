@@ -4,7 +4,7 @@ import urllib.parse
 
 # --- KONFIGURACIO ---
 try:
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]n
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except Exception:
     st.error("Hiba: GOOGLE_API_KEY hianyzik a Secrets-bol!")
     st.stop()
