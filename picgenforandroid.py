@@ -65,5 +65,4 @@ if chat_input:
                 st.error(f"Hiba tortent: {e}")
 
 st.divider()
-st.caption("Tipp: Minel reszletesebben irod le (angolul), annal szebb lesz a kep! MIvel a Magyar egy szar nyelv! Ha valami nem mukodik rafogom a fideszre! 
-           Created by ddnemet  For support conctact me on discord: ddnemet")
+st.caption("Tipp: Minel reszletesebben irod le (angolul), annal szebb lesz a kep! MIvel a Magyar egy szar nyelv! Ha valami nem mukodik rafogom a fideszre ! Created by ddnemet  For support conctact me on discord: ddnemet")
