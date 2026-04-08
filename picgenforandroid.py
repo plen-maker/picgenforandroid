@@ -1,65 +1,111 @@
 import streamlit as st
 import requests
 import io
-from PIL import Image
-import time
+import random
 
-# --- KONFIGURÁCIÓ ---
-# IDE MÁSOLD A HUGGING FACE TOKENEDET!
-HF_TOKEN = "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"
-API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
-headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+st.set_page_config(page_title="AI Kep Chat Szerkeszto", layout="wide")
 
-st.set_page_config(page_title="HuggingFace Kép Mester", page_icon="🎨")
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+if 'chat_history' not in st.session_state:
+    st.session_state['chat_history'] = []
+if 'current_image' not in st.session_state:
+    st.session_state['current_image'] = None
+if 'current_prompt' not in st.session_state:
+    st.session_state['current_prompt'] = ""
+if 'current_seed' not in st.session_state:
+    st.session_state['current_seed'] = random.randint(0, 9999999)
 
-st.title("🎨 Profi Hugging Face Kép Generátor")
-st.markdown("Ez az app a **FLUX.1** modellt használja a legszebb eredményekért.")
-
-# --- EDITOR RÉSZ ---
-prompt = st.text_area("Mit hozzak létre?", placeholder="pl: A majestic dragon sitting on a skyscraper, cinematic lighting, 8k, detailed", height=120)
-
-col1, col2 = st.columns(2)
-with col1:
-    negative_prompt = st.text_input("Amit NE tartalmazzon (opcionális):", placeholder="blurry, distorted, low quality")
-with col2:
-    aspect_ratio = st.selectbox("Méret:", ["1024x1024", "800x600", "600x800"])
-
-# --- GENERÁLÁS LOGIKA ---
-def query(payload):
-    response = requests.post(API_URL, headers=headers, json=payload)
-    if response.status_code == 200:
-        return response.content
-    elif response.status_code == 503: # Ha még töltődik a modell a szerveren
-        st.info("Az AI szerver éppen ébredezik... Várj 10 másodpercet!")
-        time.sleep(10)
-        return query(payload)
-    else:
-        st.error(f"Hiba történt: {response.status_code}")
+def generate_image(full_prompt, seed):
+    try:
+        url = f"https://image.pollinations.ai/prompt/{full_prompt.replace(' ', '%20')}?seed={seed}&model=flux"
+        response = requests.get(url, timeout=90)
+        if response.status_code == 200:
+            return response.content
+        else:
+            return None
+    except Exception:
         return None
 
-if st.button("KÉP LÉTREHOZÁSA ✨", type="primary"):
-    if prompt:
-        with st.spinner("Az AI éppen alkot (Hugging Face API)..."):
-            # Összerakjuk a kérést
-            image_bytes = query({
-                "inputs": f"{prompt}. {negative_prompt}",
-                "parameters": {"width": 1024, "height": 1024}
-            })
-            
-            if image_bytes:
-                img = Image.open(io.BytesIO(image_bytes))
-                st.image(img, caption="Generált mű", use_container_width=True)
-                
-                # --- LETÖLTÉS GOMB ---
-                st.download_button(
-                    label="📥 KÉP LETÖLTÉSE",
-                    data=image_bytes,
-                    file_name="hf_generated_image.png",
-                    mime="image/png",
-                    use_container_width=True
-                )
-    else:
-        st.warning("Írj be egy leírást!")
+if not st.session_state['logged_in']:
+    st.header("Bejelentkezes")
+    user = st.text_input("Felhasznalonev")
+    password = st.text_input("Jelszo", type="password")
+    if st.button("Belepes"):
+        if user == "Astrofinger" and password == "98976987596785y798jk":
+            st.session_state['logged_in'] = True
+            st.rerun()
+        else:
+            st.error("Hibas adatok")
+else:
+    st.title("AI Kep Chat Szerkeszto")
+    st.write("Ird le az elso kepet, majd a chat ablakban kerj modositasokat")
 
-st.markdown("---")
-st.caption("Modell: Black Forest Labs - FLUX.1 Schnell | Hosting: Hugging Face Inference API")
+    if st.sidebar.button("Kijelentkezes"):
+        st.session_state['logged_in'] = False
+        st.rerun()
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.subheader("Aktualis Kep")
+        initial_prompt = st.text_input("Elso kep leirasa", placeholder="pl: A majestic lion on a rock")
+        
+        if st.button("ELSO KEP LETREHOZASA", type="primary"):
+            if initial_prompt:
+                with st.spinner("Az AI alkot..."):
+                    st.session_state['current_seed'] = random.randint(0, 9999999)
+                    st.session_state['current_prompt'] = initial_prompt
+                    st.session_state['chat_history'] = [{"role": "user", "content": initial_prompt}]
+                    
+                    image_data = generate_image(initial_prompt, st.session_state['current_seed'])
+                    
+                    if image_data:
+                        st.session_state['current_image'] = image_data
+                    else:
+                        st.error("Hiba a generalas soran")
+            else:
+                st.warning("Irj be egy leirast")
+
+        if st.session_state['current_image']:
+            st.image(st.session_state['current_image'], use_container_width=True)
+            st.download_button(
+                label="KEP MENTESE (LETOLTES)",
+                data=st.session_state['current_image'],
+                file_name=f"ai_image_{st.session_state['current_seed']}.jpg",
+                mime="image/jpeg",
+                use_container_width=True
+            )
+
+    with col2:
+        st.subheader("Szerkesztes Chaten")
+        chat_container = st.container(height=400)
+        
+        for message in st.session_state['chat_history']:
+            with chat_container.chat_message(message["role"]):
+                st.write(message["content"])
+
+        if st.session_state['current_image']:
+            if edit_input := st.chat_input("Hogyan modositsam a kepet?"):
+                st.session_state['chat_history'].append({"role": "user", "content": edit_input})
+                with chat_container.chat_message("user"):
+                    st.write(edit_input)
+                
+                with st.spinner("AI modositas folyamatban..."):
+                    new_full_prompt = f"{st.session_state['current_prompt']}, modification: {edit_input}"
+                    image_data = generate_image(new_full_prompt, st.session_state['current_seed'])
+                    
+                    if image_data:
+                        st.session_state['current_image'] = image_data
+                        st.session_state['current_prompt'] = new_full_prompt
+                        st.rerun()
+                    else:
+                        st.error("A modositas nem sikerult")
+        else:
+            st.info("Hozd letre az elso kepet a szerkeszteshez")
+
+    if st.session_state['chat_history'] and st.button("CHAT TORLESE ES UJ KEP"):
+        st.session_state['chat_history'] = []
+        st.session_state['current_image'] = None
+        st.session_state['current_prompt'] = ""
+        st.rerun()
