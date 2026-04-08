@@ -1,18 +1,20 @@
 import streamlit as st
 import requests
-import base64
-import random
+import io
 from PIL import Image
-from io import BytesIO
 
 # --- KONFIGURACIO ---
-# A kulcsokat a Streamlit Cloud Settings -> Secrets menujeben add meg!
-STABILITY_KEY = st.secrets["STABILITY_KEY"]
-API_HOST = "https://api.stability.ai"
+# Regisztralj ingyen: https://huggingface.co/join
+# Generalj egy API tokent itt: https://huggingface.co/settings/tokens
+HF_TOKEN = st.secrets["HF_TOKEN"]
 
-st.set_page_config(page_title="AI Studio", page_icon="*")
+# Ez egy nagyon eros, modern modell (Flux.1 Schnell)
+API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
-# --- LOGIN RENDSZER (Username + Password) ---
+st.set_page_config(page_title="Pro AI Studio", layout="wide")
+
+# --- LOGIN RENDSZER ---
 def check_auth():
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
@@ -20,8 +22,6 @@ def check_auth():
         return True
 
     st.title("Login")
-    
-    # A Secrets-bol olvassuk ki a megadott nevet es jelszot
     user_input = st.text_input("User Name:")
     pass_input = st.text_input("Password:", type="password")
     
@@ -37,37 +37,53 @@ if not check_auth():
     st.stop()
 
 # --- FO PROGRAM ---
-st.title("AI Image Generator")
+st.title("Next-Gen Free AI Studio")
 
-prompt_text = st.text_area("Mit rajzoljon az AI?", placeholder="pl: A butterfly on a flower...")
-style_choice = st.selectbox("Stilus:", ["Cinematic", "Photorealistic", "Digital Art", "Fantasy Art"])
+if "full_prompt" not in st.session_state:
+    st.session_state["full_prompt"] = ""
 
-if st.button("GENERATE", type="primary"):
-    if prompt_text:
-        with st.spinner("Wait..."):
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.header("Chat / Prompt Window")
+    user_msg = st.text_area("Mit adjak hozza a kephez?", placeholder="pl: A majestic butterfly on a crystal flower...")
+    
+    col_btn1, col_btn2 = st.columns(2)
+    
+    with col_btn1:
+        if st.button("GENERATE", type="primary"):
+            if user_msg:
+                if st.session_state["full_prompt"] == "":
+                    st.session_state["full_prompt"] = user_msg
+                else:
+                    st.session_state["full_prompt"] += f", {user_msg}"
+    
+    with col_btn2:
+        if st.button("RESET"):
+            st.session_state["full_prompt"] = ""
+            st.rerun()
+
+    if st.session_state["full_prompt"]:
+        st.info(f"Aktualis leiras: {st.session_state['full_prompt']}")
+
+with col2:
+    st.header("Result")
+    if st.session_state["full_prompt"]:
+        with st.spinner("AI is thinking (High Quality)..."):
             try:
-                full_prompt = f"{prompt_text}, {style_choice}, highly detailed, masterpiece"
+                # Hugging Face API hivas
+                response = requests.post(API_URL, headers=headers, json={"inputs": st.session_state["full_prompt"]})
                 
-                url = f"{API_HOST}/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image"
-                header = {
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {STABILITY_KEY}"
-                }
-                body = {
-                    "text_prompts": [{"text": full_prompt, "weight": 1}],
-                    "cfg_scale": 7, "height": 1024, "width": 1024, "samples": 1, "steps": 30
-                }
-
-                response = requests.post(url, headers=header, json=body)
-
                 if response.status_code == 200:
-                    image_data = base64.b64decode(response.json()["artifacts"][0]["base64"])
-                    st.image(Image.open(BytesIO(image_data)), use_container_width=True)
-                    st.download_button("Save Image", data=image_data, file_name="ai_result.png")
+                    image_bytes = response.content
+                    image = Image.open(io.BytesIO(image_bytes))
+                    st.image(image, use_container_width=True)
+                    st.download_button("Save High-Res Image", data=image_bytes, file_name="ai_pro_result.png")
+                elif response.status_code == 503:
+                    st.warning("A modell eppen toltodik, varj 10 masodpercet es probald ujra!")
                 else:
                     st.error(f"Error: {response.status_code}")
             except Exception as e:
                 st.error(f"System error: {e}")
     else:
-        st.warning("Type something first!")
+        st.write("Start chatting to see results!")
