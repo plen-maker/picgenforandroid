@@ -8,8 +8,7 @@ try:
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=GOOGLE_API_KEY)
     # Gemini modell a fordításhoz
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash-latest')
-except Exception:
+    gemini_model = gemini_model = genai.GenerativeModel('gemini-1.5-flash')
     st.error("Hiba: GOOGLE_API_KEY hianyzik a Secrets-bol!")
     st.stop()
 
