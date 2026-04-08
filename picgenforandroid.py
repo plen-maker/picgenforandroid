@@ -3,79 +3,88 @@ import requests
 import urllib.parse
 import google.generativeai as genai
 
-# Kulcsok betoltese (A Gemini-hez kell a GOOGLE_API_KEY a Secrets-be!)
+# --- KULCSOK ES KONFIGURACIO ---
+# Gyozodj meg rola, hogy a GOOGLE_API_KEY benne van a Streamlit Secrets-ben!
 try:
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=GOOGLE_API_KEY)
-    # Gemini modell a fordításhoz
-    gemini_model = gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-    st.error("Hiba: GOOGLE_API_KEY hianyzik a Secrets-bol!")
+    # A legstabilabb modellnev hasznalata a 404 elkerulesere
+    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.error(f"Hiba a kulcsok betoltesenel: {e}")
     st.stop()
 
 # Alapbeallitasok
-APP_PASSWORD = "admin"
-st.set_page_config(page_title="Magyar AI Kepalkoto", page_icon="🎨")
+APP_PASSWORD = "admin" # Ezt a jelszot kell beirnod
+st.set_page_config(page_title="Magyar AI Kep Studio", page_icon="🎨")
 
-# --- LOGIN ---
+# --- LOGIN RENDSZER ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
+    st.title("🔐 Belepes")
     pwd_input = st.text_input("Jelszo", type="password")
     if st.button("OK"):
         if pwd_input == APP_PASSWORD:
             st.session_state['logged_in'] = True
             st.rerun()
+        else:
+            st.error("Hibas jelszo!")
     st.stop()
 
-st.title("🎨 Magyar AI Kepalkoto - 404 Nélkül")
-st.write("Irj barmit magyarul, es az AI pontosan megrajzolja!")
+# --- APP FELULET ---
+st.title("🎨 Magyar AI Kepalkoto - Profi")
+st.write("Irj le valamit magyarul, es az AI megrajzolja neked!")
 
-# --- CHAT INPUT ---
-# Ez a mezo mindig az oldal aljan marad
-chat_input = st.chat_input("Pl.: 'Egy modern török rendőr kék uniformisban'...")
+# --- CHAT ABLAK ---
+# Ez a mezo az oldal aljan jelenik meg
+chat_input = st.chat_input("Pl.: 'Egy modern rendőr kék egyenruhában, Isztambul utcáin'...")
 
 if chat_input:
-    # Megjelenitjük a felhasznalo kereset
+    # 1. Megjelenitjuk amit a felhasznalo irt
     with st.chat_message("user"):
         st.markdown(chat_input)
 
-    # Generalas folyamata
+    # 2. AI feldolgozas
     with st.chat_message("assistant"):
-        with st.spinner("AI forditas es rajzolas folyamatban..."):
+        with st.spinner("AI gondolkodik es rajzol..."):
             try:
-                # 1. FORDITAS: A Gemini leforditja a magyar kerest profi angol prompthoz
-                # A Gemini nem csak simán fordít, hanem kiegészíti a szükséges kontextussal
-                translation_prompt = f"Translate and enhance this image generation request for a realistic photo of a human: '{chat_input}'. Ensure details like clothing style, professional context, realistic lighting, and photorealistic style are included for Pollinations.ai. Only output the English translation, nothing else."
-                translated_res = gemini_model.generate_content(translation_prompt)
-                english_prompt = translated_res.text.strip()
+                # FORDITAS ES FELJAVITAS GEMINI-VEL
+                # Megkerjuk a Geminit, hogy csinaljon profi angol promptot
+                instruction = (
+                    "You are an expert AI image prompt engineer. Translate the following Hungarian request to a "
+                    "highly detailed, photorealistic English prompt. Focus on human features, modern clothing, "
+                    "and realistic lighting. Only output the English prompt text: "
+                )
                 
-                # Kiirjuk kicsiben, hogy mit forditott, hogy tudd, mi tortenik
-                st.caption(f"🇬🇧 AI forditas: {english_prompt}")
+                response = gemini_model.generate_content(instruction + chat_input)
+                english_prompt = response.text.strip()
+                
+                # Kicsiben megmutatjuk a forditas eredmenyet
+                st.caption(f"🇬🇧 Forditott parancs: {english_prompt}")
 
-                # 2. RAJZOLAS: Pollinations API (nem dob 404-et)
+                # KEPGENERALAS POLLINATIONS-SZAL
                 encoded_prompt = urllib.parse.quote(english_prompt)
-                final_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true"
+                image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&enhance=true"
                 
-                # Kep lekerese
-                res = requests.get(final_url)
+                img_res = requests.get(image_url)
                 
-                if res.status_code == 200:
-                    # Megjelenitjük a kepet a chaten belul
-                    st.image(res.content, use_container_width=True)
+                if img_res.status_code == 200:
+                    # Megjelenitjuk a kesz kepet
+                    st.image(img_res.content, use_container_width=True)
                     
-                    # Mentes gomb a kep alatt
+                    # Mentes gomb
                     st.download_button(
                         label="📥 Kep mentese",
-                        data=res.content,
-                        file_name="ai_kep.png",
+                        data=img_res.content,
+                        file_name="ai_generalt_kep.png",
                         mime="image/png"
                     )
                 else:
-                    st.error("Sajnos a kepalkoto szerver most nem valaszol.")
+                    st.error(f"Sajnos a kepalkoto szerver hibaat jelzett: {img_res.status_code}")
             
             except Exception as e:
-                st.error(f"Hiba tortent: {e}")
-
+                st.error(f"Hiba tortent a folyamat soran: {e}")
 st.divider()
 st.caption("Tipp: Minel reszletesebben irod le (angolul), annal szebb lesz a kep! MIvel a Magyar egy szar nyelv! Ha valami nem mukodik rafogom a fideszre ! Created by ddnemet  For support conctact me on discord: ddnemet")
