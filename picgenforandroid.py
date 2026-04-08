@@ -12,13 +12,14 @@ except Exception:
 
 # Alapbeallitasok
 APP_PASSWORD = "admin"
-st.set_page_config(page_title="Profi AI Kep Studio", page_icon="🎨")
+st.set_page_config(page_title="AI Kep Studio Pro", page_icon="🎨")
 
-# LOGIN
+# --- LOGIN ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
+    st.title("🔐 Belepes")
     pwd_input = st.text_input("Jelszo", type="password")
     if st.button("OK"):
         if pwd_input == APP_PASSWORD:
@@ -26,25 +27,29 @@ if not st.session_state['logged_in']:
             st.rerun()
     st.stop()
 
-st.title("🎨 AI Kep-Mester")
+st.title("🎨 AI Kep-Mester (Stabil verzio)")
 
-# 1. KEP FELTOLTESE
-uploaded_file = st.file_uploader("Tolts fel egy kepet alapnak:", type=['png', 'jpg', 'jpeg'])
+# 1. KEP FELTOLTESE (Csak a modositashoz kell)
+st.markdown("### 1. Tolts fel egy kepet alapnak")
+uploaded_file = st.file_uploader("Valassz egy kepet...", type=['png', 'jpg', 'jpeg'])
 
 if uploaded_file:
-    st.image(uploaded_file, caption="Eredeti kep", use_container_width=True)
+    st.image(uploaded_file, caption="Eredeti kep betoltve", use_container_width=True)
 
-# 2. CHAT INPUT
-chat_input = st.chat_input("Mit modositsak a kepen? (angolul)")
+st.divider()
+
+# 2. CHAT INPUT (Ez vezerli a modositast vagy a generast)
+chat_input = st.chat_input("Mit modositsak vagy mit rajzoljak? (angolul)")
 
 if chat_input:
     with st.spinner("AI dolgozik..."):
         try:
-            # Ha van feltoltott kep, akkor "Image-to-Image" modellt hasznalunk
+            headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+            
             if uploaded_file:
-                # Ezt a modellt hasznaljuk kepmodositashoz
-                API_URL = "https://router.huggingface.co/hf-inference/models/timbrooks/instruct-pix2pix"
-                headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+                # --- MODOSITAS (Image-to-Image / ControlNet) ---
+                # Ezt a modellt hasznaljuk, ami megtartja a kep szerkezetet
+                API_URL = "https://router.huggingface.co/hf-inference/models/lllyasviel/ControlNet-v1-1-nightly"
                 
                 # Kep elokeszitese
                 base_img = Image.open(uploaded_file).convert("RGB")
@@ -52,20 +57,21 @@ if chat_input:
                 base_img.save(buf, format="JPEG")
                 img_bytes = buf.getvalue()
 
-                # Kuldes a Hugging Face-nek
+                # ControlNet-nek mas a payloadja
                 payload = {
                     "inputs": chat_input,
-                    "image": uploaded_file.getvalue()
+                    "image": uploaded_file.getvalue() # Ez a formatum is mukodik
                 }
-                # Megjegyzes: a Pix2Pix modellnek maskepp kell kuldeni a kepet
+                
+                # Probaljuk a multipart/form-data kuldest, ami a ControlNet-nel jobb
                 response = requests.post(API_URL, headers=headers, data=img_bytes, params={"prompt": chat_input})
             
             else:
-                # Ha NINCS kep, akkor csak siman rajzolunk valami ujat (FLUX)
+                # --- UJ KEP GENERALASA (FLUX) ---
                 API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
-                headers = {"Authorization": f"Bearer {HF_TOKEN}"}
                 response = requests.post(API_URL, headers=headers, json={"inputs": chat_input})
 
+            # Eredmeny ellenorzese
             if response.status_code == 200:
                 final_img = Image.open(BytesIO(response.content))
                 st.image(final_img, caption="AI eredmeny", use_container_width=True)
@@ -73,14 +79,18 @@ if chat_input:
                 # Mentes gomb
                 buf_save = BytesIO()
                 final_img.save(buf_save, format="PNG")
-                st.download_button("Mentes", buf_save.getvalue(), "ai_kep.png", "image/png")
+                st.download_button("📥 Kép mentése", buf_save.getvalue(), "ai_kep.png", "image/png")
             elif response.status_code == 503:
-                st.warning("A modell eppen ebred, probald ujra 20 masodperc mulva!")
+                st.warning("A modell toltodik, probald ujra 20 mp mulva!")
+            elif response.status_code == 404:
+                st.error("A kért modell már nem érhető el ezen az URL-en. ControlNet-re valtottunk, de ellenorizd az API_URL sorokat!")
             else:
                 st.error(f"Szerver hiba: {response.status_code}")
+                # Kiirjuk a valaszt, hogy lassuk, mi a baj
+                st.write(response.text)
                 
         except Exception as e:
             st.error(f"Hiba tortent: {e}")
 
 st.divider()
-st.caption("A 'Pix2Pix' technologia megprobalja megtartani az eredeti arcot.")
+st.caption("A ControlNet technologia (ha van kep feltoltve) megtartja a kep szerkezetet.")
