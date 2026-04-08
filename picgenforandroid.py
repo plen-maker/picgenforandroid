@@ -3,9 +3,6 @@ import requests
 from io import BytesIO
 from PIL import Image
 
-# A kulcsot a Streamlit feluleten az Advanced Settings -> Secrets resznel add meg!
-# Formatum: HF_TOKEN = "hf_...a_te_kulcsod..."
-
 try:
     HF_TOKEN = st.secrets["HF_TOKEN"]
 except Exception:
@@ -30,7 +27,8 @@ if not st.session_state['logged_in']:
 
 st.title("AI Kepgenerator")
 
-API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+# AZ UJ ROUTER CIM
+API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-dev"
 headers = {"Authorization": "Bearer " + HF_TOKEN}
 
 uploaded_file = st.file_uploader("Kep alapnak", type=['png', 'jpg', 'jpeg'])
@@ -40,6 +38,7 @@ if st.button("Generalas"):
     if prompt:
         with st.spinner("Varj..."):
             try:
+                # Az uj formatus szerinti keres
                 res = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=60)
                 
                 if res.status_code == 200:
@@ -49,11 +48,9 @@ if st.button("Generalas"):
                     img.save(buf, format="PNG")
                     st.download_button("Mentes", buf.getvalue(), "kep.png", "image/png")
                 elif res.status_code == 503:
-                    st.warning("A szerver ebred, probald ujra 30 mp mulva!")
-                elif res.status_code == 401:
-                    st.error("Hiba: Rossz a token a Secrets-ben!")
+                    st.warning("A modell toltodik, probald ujra 30 mp mulva!")
                 else:
                     st.error("Hiba kod: " + str(res.status_code))
                     st.write(res.text)
             except Exception as e:
-                st.error("Varatlan hiba: " + str(e))
+                st.error("Hiba: " + str(e))
